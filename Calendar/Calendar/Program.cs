@@ -12,20 +12,23 @@ namespace Calendar
 {
 	class Program
 	{
-		enum TypeOfDate
-		{
-			day, week
-		}
-		struct Date
-		{
-			public int value;
-			public TypeOfDate type;
-			public bool current;
-		}
-		public struct Position
+		struct Position
 		{
 			public int col;
 			public int row;
+		}
+		struct GraphicSettings
+		{
+			public Graphics g;
+			public int cellSize;
+			public Brush weekColor;
+			public Brush dayColor;
+			public Brush weekdayColor;
+			public Brush currentDayColor;
+			public Brush currentDayBg;
+			public Font weekFont;
+			public Font dayFont;
+			public Font weekdayFont;
 		}
 
 		static void Main(string[] args)
@@ -43,37 +46,36 @@ namespace Calendar
 				var days = DateTime.DaysInMonth(dateArr[2], dateArr[1]);
 				GregorianCalendar gc = new GregorianCalendar();
 				var weekNumber = gc.GetWeekOfYear(date, CalendarWeekRule.FirstDay, DayOfWeek.Monday) - 1;
-				var row = 1;
 
-				var height = (firstDay + days) / 7 * 80;
-				var width = 540;
+				var grSet = new GraphicSettings();
+				grSet.cellSize = 60;
+				var weeks = (firstDay + days + 6) / 7;
+				var height = (weeks + 2) * grSet.cellSize;
+				var width = grSet.cellSize * 9;
 				var img = new Bitmap(width, height);
-				var g = GraphicsInit(img);
+				grSet.g = GraphicsInit(img);
+				grSet.weekColor = Brushes.RoyalBlue;
+				grSet.dayColor = Brushes.Black;
+				grSet.weekdayColor = Brushes.Gray;
+				grSet.currentDayColor = Brushes.WhiteSmoke;
+				grSet.currentDayBg = Brushes.Red;
+				grSet.dayFont = new Font("Segoe UI", 22f);
+				grSet.weekFont = new Font("Segoe UI Light", 22f);
+				grSet.weekdayFont = new Font("Segoe UI Light", 18f);
+
+				AddWeekNumbers(grSet, weekNumber, weeks);
+				AddDayNames(grSet);
 
 				for (int i = 0; i < days; i++)
 				{
-					var toAdd = new Date();
 					var position = new Position();
-					if (i == 0 || (i + firstDay) % 7 == 0)
-					{
-						toAdd.type = TypeOfDate.week;
-						toAdd.value = weekNumber % 52 + 1;
-						toAdd.current = false;
-						position.col = 1;
-						position.row = row;
-						AppendDay(g, toAdd, position);
-						weekNumber++;
-						row++;
-					}
-					toAdd.type = TypeOfDate.day;
-					toAdd.value = i + 1;
+					var value = i + 1;
+					bool current = false;
 					if (i == dateArr[0] - 1)
-						toAdd.current = true;
-					else
-						toAdd.current = false;
+						current = true;
 					position.col = (i + firstDay) % 7 + 2;
 					position.row = (i + firstDay) / 7 + 1;
-					AppendDay(g, toAdd, position);
+					AppendDay(grSet, value, position, current);
 				}
 				var fileName = "calendar.png";
 				img.Save(fileName);
@@ -95,26 +97,46 @@ namespace Calendar
 			g.FillRectangle(Brushes.White, 0, 0, img.Width, img.Height);
 			return g;
 		}
-		static void AppendDay(Graphics g, Date date, Position pos)
+		static void AppendDay(GraphicSettings gr, int value, Position pos, bool current)
 		{
-			var cellSize = 60;
-			var font = new Font("Calibri", 22f);
-			var color = Brushes.DarkGray;
-			if (date.type == TypeOfDate.week)
+			var color = gr.dayColor;
+			if (current)
 			{
-				font = new Font(font, FontStyle.Italic);
-				color = Brushes.OrangeRed;
-			}
-			if (date.current)
-			{
-				var ellDia = cellSize / 1.4f;
-				g.FillEllipse(Brushes.Red, pos.col * cellSize - ellDia/2, pos.row * cellSize - ellDia/2, ellDia, ellDia);
+				var diam = gr.cellSize / 1.4f;
+				gr.g.FillEllipse(Brushes.Red, pos.col * gr.cellSize - diam/2, (pos.row + 1) * gr.cellSize - diam/2, diam, diam);
 				color = Brushes.WhiteSmoke;
 			}
-			var s = date.value.ToString();
-			var sz = g.MeasureString(s, font);
-			g.DrawString(s, font, color, new PointF(cellSize * pos.col - sz.Width / 2, cellSize * pos.row - sz.Height / 2));
-			g.Flush();
+			if (pos.col == 8)
+				color = Brushes.Red;
+			var s = value.ToString();
+			var sz = gr.g.MeasureString(s, gr.dayFont);
+			gr.g.DrawString(s, gr.dayFont, color, new PointF(gr.cellSize * pos.col - sz.Width / 2, gr.cellSize * (pos.row + 1) - sz.Height / 2));
+			gr.g.Flush();
+		}
+		static void AddWeekNumbers(GraphicSettings gr, int weekStart, int weekCount)
+		{
+			for (int i = 1; i <= weekCount; i++)
+			{
+				weekStart = weekStart % 52 + 1;
+				var s = weekStart.ToString();
+				var sz = gr.g.MeasureString(s, gr.weekFont);
+				gr.g.DrawString(s, gr.weekFont, gr.weekColor, new PointF(gr.cellSize - sz.Width / 2, gr.cellSize * (i + 1) - sz.Height / 2));
+				gr.g.Flush();
+			}
+		}
+		static void AddDayNames(GraphicSettings gr)
+		{
+			var dayNames = Enum.GetValues(typeof(DayOfWeek)).OfType<DayOfWeek>().ToList().Skip(1).Select(x => x.ToString()).ToList();
+			dayNames.Add(DayOfWeek.Sunday.ToString());
+
+			foreach (var name in dayNames)
+			{
+				var s = name.Substring(0, 3);
+				if (s == "Sun")
+					gr.weekdayColor = Brushes.Red;
+				var sz = gr.g.MeasureString(s, gr.weekdayFont);
+				gr.g.DrawString(s, gr.weekdayFont, gr.weekdayColor, new PointF(gr.cellSize * (dayNames.IndexOf(name) + 2) - sz.Width / 2, gr.cellSize - sz.Height / 2));
+			}
 		}
 	}
 }
